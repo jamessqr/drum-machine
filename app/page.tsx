@@ -69,25 +69,30 @@ export default function Page() {
       return beat / subdiv;
     }
 
-    function ensureAudio() {
+   function ensureAudio() {
       if (audioCtx) return;
+
       audioCtx = new AudioContext();
 
-      applyVolume(masterEl, masterGain, 1.5);
-      applyVolume(hhVolEl, hhGain, 2.0);
-      applyVolume(snVolEl, snGain, 2.5);
-      applyVolume(kVolEl, kGain, 3.0);
+      // Create gain nodes FIRST
+      masterGain = audioCtx.createGain();
+      hhGain = audioCtx.createGain();
+      snGain = audioCtx.createGain();
+      kGain = audioCtx.createGain();
 
-      masterGain.gain.value = +masterEl.value;
-      hhGain.gain.value = +hhVolEl.value;
-      snGain.gain.value = +snVolEl.value;
-      kGain.gain.value = +kVolEl.value;
-
+      // Wire signal chain
       hhGain.connect(masterGain);
       snGain.connect(masterGain);
       kGain.connect(masterGain);
       masterGain.connect(audioCtx.destination);
+
+      // Apply initial volumes (exponential + dramatic)
+      applyVolume(masterEl, masterGain, 1.5);
+      applyVolume(hhVolEl, hhGain, 2.0);
+      applyVolume(snVolEl, snGain, 2.5);
+      applyVolume(kVolEl, kGain, 3.0);
     }
+
 
     function noiseBuffer() {
       const length = audioCtx!.sampleRate * 0.25;
@@ -138,11 +143,17 @@ export default function Page() {
       src.stop(t + 0.08);
     }
 
-    function applyVolume(el: HTMLInputElement, gain: GainNode, max = 2.5) {
-      // exponential curve for musical feel
+    function applyVolume(
+      el: HTMLInputElement,
+      gain: GainNode | null,
+      max = 2.5
+    ) {
+      if (!audioCtx || !gain) return;
+
       const v = parseFloat(el.value); // 0–1
       const scaled = Math.pow(v, 2) * max;
-      gain.gain.setTargetAtTime(scaled, audioCtx!.currentTime, 0.01);
+
+      gain.gain.setTargetAtTime(scaled, audioCtx.currentTime, 0.01);
     }
 
 
@@ -195,6 +206,7 @@ export default function Page() {
         applyVolume(kVolEl, kGain, 3.0);
       });
     });
+
 
     // ---------- ROCK PRESET ----------
     function applyRockPreset() {
