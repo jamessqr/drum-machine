@@ -140,7 +140,8 @@ export default function Page() {
       function buildSequencer() {
         stepsPerBar = calcStepsPerBar();
 
-        ["hh", "sn", "k"].forEach((k) => {
+        (["hh", "sn", "k"] as const).forEach((k) => {
+
           pattern[k].length = stepsPerBar;
           pattern[k].fill(false);
         });
