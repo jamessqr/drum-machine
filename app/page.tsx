@@ -174,6 +174,45 @@ export default function Page() {
         loopInfoEl.textContent = `${tsNumEl.value}/${tsDenEl.value} • ${stepsPerBar} steps`;
       }
 
+      // ---------- ROCK PRESET ----------
+      function applyRockPreset() {
+        bpmEl.value = "110";
+        stepsPerBar = calcStepsPerBar();
+
+        ["hh", "sn", "k"].forEach((k) => {
+          pattern[k as "hh"].length = stepsPerBar;
+          pattern[k as "hh"].fill(false);
+        });
+
+        const subdiv = +subdivEl.value;
+        const beats = +tsNumEl.value;
+
+        // Hi-hat on 8ths
+        const hatInterval = subdiv >= 4 ? subdiv / 2 : 1;
+        for (let i = 0; i < stepsPerBar; i += hatInterval) {
+          pattern.hh[i] = true;
+        }
+
+        // Kick: beats 1 & 3
+        pattern.k[0] = true;
+        if (beats >= 3) pattern.k[2 * subdiv] = true;
+
+        // Snare: beats 2 & 4
+        if (beats >= 2) pattern.sn[subdiv] = true;
+        if (beats >= 4) pattern.sn[3 * subdiv] = true;
+
+        buildSequencer();
+
+        // Re-apply visual state
+        const rows = seqEl.querySelectorAll(".steps");
+        ["hh", "sn", "k"].forEach((inst, rowIdx) => {
+          const steps = rows[rowIdx].children;
+          for (let i = 0; i < stepsPerBar; i++) {
+            steps[i].classList.toggle("on", pattern[inst as "hh"][i]);
+          }
+        });
+      }
+
       function scheduler() {
         while (nextNoteTime < audioCtx!.currentTime + scheduleAheadSec) {
           if (pattern.hh[currentStep]) playHiHat(nextNoteTime);
@@ -206,9 +245,9 @@ export default function Page() {
       startBtn.onclick = start;
       stopBtn.onclick = stop;
       clearBtn.onclick = buildSequencer;
-      presetBtn.onclick = buildSequencer;
+      presetBtn.onclick = applyRockPreset;
 
-      buildSequencer();
+      applyRockPreset();
     })();
   }, []);
 
@@ -239,10 +278,15 @@ export default function Page() {
 
         <div className="panel row">
           <label>BPM <input id="bpm" type="number" defaultValue={110} /></label>
-          <label>Time Sig <input id="tsNum" type="number" defaultValue={4} />
-            <select id="tsDen"><option value="4">4</option><option value="8">8</option></select>
+          <label>
+            Time Sig <input id="tsNum" type="number" defaultValue={4} />
+            <select id="tsDen">
+              <option value="4">4</option>
+              <option value="8">8</option>
+            </select>
           </label>
-          <label>Subdivision
+          <label>
+            Subdivision
             <select id="subdiv">
               <option value="4">16ths</option>
               <option value="2">8ths</option>
@@ -251,7 +295,7 @@ export default function Page() {
           <button id="startBtn">Start</button>
           <button id="stopBtn" disabled>Stop</button>
           <button id="clearBtn">Clear</button>
-          <button id="presetBtn">Preset</button>
+          <button id="presetBtn">Rock</button>
           <div id="status" className="status">stopped</div>
         </div>
 
