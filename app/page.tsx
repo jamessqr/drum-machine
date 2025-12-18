@@ -20,9 +20,15 @@ export default function Page() {
         snGain: GainNode,
         kGain: GainNode;
 
-      const mute = { hh: false, sn: false, k: false };
+      const pattern: Record<"hh" | "sn" | "k", boolean[]> = {
+        hh: [],
+        sn: [],
+        k: [],
+      };
 
-      // ---------- UI ----------
+      let stepsPerBar = 16;
+
+      // ---------- Elements ----------
       const bpmEl = document.getElementById("bpm") as HTMLInputElement;
       const tsNumEl = document.getElementById("tsNum") as HTMLInputElement;
       const tsDenEl = document.getElementById("tsDen") as HTMLSelectElement;
@@ -33,39 +39,32 @@ export default function Page() {
       const snVolEl = document.getElementById("snVol") as HTMLInputElement;
       const kVolEl = document.getElementById("kVol") as HTMLInputElement;
 
-      const masterValEl = document.getElementById("masterVal")!;
-      const hhValEl = document.getElementById("hhVal")!;
-      const snValEl = document.getElementById("snVal")!;
-      const kValEl = document.getElementById("kVal")!;
-
       const startBtn = document.getElementById("startBtn") as HTMLButtonElement;
       const stopBtn = document.getElementById("stopBtn") as HTMLButtonElement;
       const clearBtn = document.getElementById("clearBtn") as HTMLButtonElement;
       const presetBtn = document.getElementById("presetBtn") as HTMLButtonElement;
+
       const statusEl = document.getElementById("status")!;
       const seqEl = document.getElementById("sequencer")!;
       const loopInfoEl = document.getElementById("loopInfo")!;
 
-      let stepsPerBar = 16;
-      const pattern: Record<string, boolean[]> = { hh: [], sn: [], k: [] };
-
+      // ---------- Helpers ----------
       const clamp = (n: number, a: number, b: number) =>
         Math.max(a, Math.min(b, n));
 
       function calcStepsPerBar() {
-        const num = clamp(parseInt(tsNumEl.value || "4"), 1, 15);
-        const den = parseInt(tsDenEl.value);
-        const subdiv = parseInt(subdivEl.value);
-        return { num, den, subdiv, spb: num * subdiv };
+        const num = clamp(+tsNumEl.value || 4, 1, 15);
+        const subdiv = +subdivEl.value;
+        return num * subdiv;
       }
 
       function secondsPerStep() {
-        const bpm = clamp(parseFloat(bpmEl.value || "110"), 40, 240);
-        const den = parseInt(tsDenEl.value);
-        const subdiv = parseInt(subdivEl.value);
+        const bpm = clamp(+bpmEl.value || 110, 40, 240);
+        const den = +tsDenEl.value;
+        const subdiv = +subdivEl.value;
         const quarter = 60 / bpm;
-        const beatDur = quarter * (4 / den);
-        return beatDur / subdiv;
+        const beat = quarter * (4 / den);
+        return beat / subdiv;
       }
 
       function ensureAudio() {
@@ -97,9 +96,8 @@ export default function Page() {
       }
 
       function playKick(t: number) {
-        if (!audioCtx || mute.k) return;
-        const o = audioCtx.createOscillator();
-        const g = audioCtx.createGain();
+        const o = audioCtx!.createOscillator();
+        const g = audioCtx!.createGain();
         o.type = "sine";
         o.frequency.setValueAtTime(140, t);
         o.frequency.exponentialRampToValueAtTime(50, t + 0.08);
@@ -111,13 +109,12 @@ export default function Page() {
       }
 
       function playSnare(t: number) {
-        if (!audioCtx || mute.sn) return;
-        const src = audioCtx.createBufferSource();
+        const src = audioCtx!.createBufferSource();
         src.buffer = noiseBuffer();
-        const hp = audioCtx.createBiquadFilter();
+        const hp = audioCtx!.createBiquadFilter();
         hp.type = "highpass";
         hp.frequency.value = 900;
-        const g = audioCtx.createGain();
+        const g = audioCtx!.createGain();
         g.gain.setValueAtTime(0.9, t);
         g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
         src.connect(hp).connect(g).connect(snGain);
@@ -126,13 +123,12 @@ export default function Page() {
       }
 
       function playHiHat(t: number) {
-        if (!audioCtx || mute.hh) return;
-        const src = audioCtx.createBufferSource();
+        const src = audioCtx!.createBufferSource();
         src.buffer = noiseBuffer();
-        const hp = audioCtx.createBiquadFilter();
+        const hp = audioCtx!.createBiquadFilter();
         hp.type = "highpass";
         hp.frequency.value = 7000;
-        const g = audioCtx.createGain();
+        const g = audioCtx!.createGain();
         g.gain.setValueAtTime(0.35, t);
         g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
         src.connect(hp).connect(g).connect(hhGain);
@@ -141,20 +137,22 @@ export default function Page() {
       }
 
       function buildSequencer() {
-        const { num, subdiv, spb } = calcStepsPerBar();
-        stepsPerBar = spb;
-
-        for (const k of ["hh", "sn", "k"]) {
-          pattern[k] = new Array(stepsPerBar).fill(false);
-        }
+        stepsPerBar = calcStepsPerBar();
+        ["hh", "sn", "k"].forEach((k) => {
+          pattern[k as "hh"].length = stepsPerBar;
+          pattern[k as "hh"].fill(false);
+        });
 
         seqEl.innerHTML = "";
 
-        ["hh", "sn", "k"].forEach((inst) => {
-          const label = document.createElement("div");
-          label.className = "inst";
-          label.textContent =
-            inst === "hh" ? "HI-HAT" : inst === "sn" ? "SNARE" : "KICK";
+        ([
+          ["hh", "HI-HAT"],
+          ["sn", "SNARE"],
+          ["k", "KICK"],
+        ] as const).forEach(([key, label]) => {
+          const labelEl = document.createElement("div");
+          labelEl.className = "inst";
+          labelEl.textContent = label;
 
           const steps = document.createElement("div");
           steps.className = "steps";
@@ -163,19 +161,17 @@ export default function Page() {
             const s = document.createElement("div");
             s.className = "step";
             s.onclick = () => {
-              pattern[inst][i] = !pattern[inst][i];
-              s.classList.toggle("on", pattern[inst][i]);
+              pattern[key][i] = !pattern[key][i];
+              s.classList.toggle("on", pattern[key][i]);
             };
             steps.appendChild(s);
           }
 
-          seqEl.appendChild(label);
+          seqEl.appendChild(labelEl);
           seqEl.appendChild(steps);
         });
 
-        loopInfoEl.textContent = `${num}/${
-          tsDenEl.value
-        } • ${stepsPerBar} steps`;
+        loopInfoEl.textContent = `${tsNumEl.value}/${tsDenEl.value} • ${stepsPerBar} steps`;
       }
 
       function scheduler() {
@@ -183,7 +179,6 @@ export default function Page() {
           if (pattern.hh[currentStep]) playHiHat(nextNoteTime);
           if (pattern.sn[currentStep]) playSnare(nextNoteTime);
           if (pattern.k[currentStep]) playKick(nextNoteTime);
-
           currentStep = (currentStep + 1) % stepsPerBar;
           nextNoteTime += secondsPerStep();
         }
@@ -221,75 +216,55 @@ export default function Page() {
     <>
       <style>{`
         body { background:#000; color:#fff; font-family:system-ui; }
-        .wrap { max-width:1100px; margin:0 auto; padding:18px; }
-        h1 { font-size:20px; }
-        .panel { border:1px solid #fff; border-radius:12px; padding:14px; margin-bottom:14px; }
-        .row { display:flex; gap:12px; flex-wrap:wrap; }
+        .wrap { max-width:1200px; margin:0 auto; padding:20px; }
+        h1 { margin-bottom:12px; }
+        .panel { border:1px solid #fff; border-radius:14px; padding:16px; margin-bottom:16px; }
+        .row { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
         label { font-size:12px; }
-        input, select, button { background:#000; color:#fff; border:1px solid #fff; }
-        button { padding:8px 12px; cursor:pointer; }
+        input, select, button {
+          background:#000; color:#fff; border:1px solid #fff;
+          padding:6px 8px;
+        }
+        button { cursor:pointer; }
         .grid { display:grid; grid-template-columns:110px 1fr; gap:10px; }
+        .inst { font-weight:700; }
         .steps { display:grid; grid-auto-flow:column; gap:6px; }
         .step { width:28px; height:28px; border:1px solid #fff; cursor:pointer; }
         .step.on { background:#fff; }
+        .status { font-size:12px; margin-top:4px; }
       `}</style>
 
       <div className="wrap">
         <h1>Drum Machine</h1>
 
         <div className="panel row">
-          <div>
-            <label>BPM</label>
-            <input id="bpm" type="number" defaultValue={110} />
-          </div>
-          <div>
-            <label>Time Sig</label>
-            <input id="tsNum" type="number" defaultValue={4} />
-            <select id="tsDen">
-              <option value="4">4</option>
-              <option value="8">8</option>
-            </select>
-          </div>
-          <div>
-            <label>Subdivision</label>
+          <label>BPM <input id="bpm" type="number" defaultValue={110} /></label>
+          <label>Time Sig <input id="tsNum" type="number" defaultValue={4} />
+            <select id="tsDen"><option value="4">4</option><option value="8">8</option></select>
+          </label>
+          <label>Subdivision
             <select id="subdiv">
               <option value="4">16ths</option>
               <option value="2">8ths</option>
             </select>
-          </div>
-          <div>
-            <button id="startBtn">Start</button>
-            <button id="stopBtn" disabled>
-              Stop
-            </button>
-            <button id="clearBtn">Clear</button>
-            <button id="presetBtn">Preset</button>
-            <div id="status">stopped</div>
-          </div>
+          </label>
+          <button id="startBtn">Start</button>
+          <button id="stopBtn" disabled>Stop</button>
+          <button id="clearBtn">Clear</button>
+          <button id="presetBtn">Preset</button>
+          <div id="status" className="status">stopped</div>
         </div>
 
         <div className="panel row">
-          <div>
-            <label>Hi-hat</label>
-            <input id="hhVol" type="range" min="0" max="1" step="0.01" />
-          </div>
-          <div>
-            <label>Snare</label>
-            <input id="snVol" type="range" min="0" max="1" step="0.01" />
-          </div>
-          <div>
-            <label>Kick</label>
-            <input id="kVol" type="range" min="0" max="1" step="0.01" />
-          </div>
-          <div>
-            <label>Master</label>
-            <input id="master" type="range" min="0" max="1" step="0.01" />
-          </div>
+          <label>Hi-hat <input id="hhVol" type="range" min="0" max="1" step="0.01" defaultValue="0.5" /></label>
+          <label>Snare <input id="snVol" type="range" min="0" max="1" step="0.01" defaultValue="0.6" /></label>
+          <label>Kick <input id="kVol" type="range" min="0" max="1" step="0.01" defaultValue="0.8" /></label>
+          <label>Master <input id="master" type="range" min="0" max="1" step="0.01" defaultValue="0.9" /></label>
         </div>
 
         <div className="panel">
           <div id="sequencer" className="grid"></div>
-          <div id="loopInfo"></div>
+          <div id="loopInfo" style={{ marginTop: 8 }} />
         </div>
       </div>
     </>
