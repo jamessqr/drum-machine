@@ -17,10 +17,10 @@ export default function Page() {
     let currentStep = 0;
     let isPlaying = false;
 
-    let masterGain: GainNode,
-      hhGain: GainNode,
-      snGain: GainNode,
-      kGain: GainNode;
+    let masterGain: GainNode | null = null;
+    let hhGain: GainNode | null = null;
+    let snGain: GainNode | null = null;
+    let kGain: GainNode | null = null;
 
     const pattern: Record<Instrument, boolean[]> = {
       hh: [],
