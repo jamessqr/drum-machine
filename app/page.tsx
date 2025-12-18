@@ -136,11 +136,13 @@ export default function Page() {
         src.stop(t + 0.08);
       }
 
+      // ---------- Sequencer ----------
       function buildSequencer() {
         stepsPerBar = calcStepsPerBar();
+
         ["hh", "sn", "k"].forEach((k) => {
-          pattern[k as "hh"].length = stepsPerBar;
-          pattern[k as "hh"].fill(false);
+          pattern[k].length = stepsPerBar;
+          pattern[k].fill(false);
         });
 
         seqEl.innerHTML = "";
@@ -177,12 +179,7 @@ export default function Page() {
       // ---------- ROCK PRESET ----------
       function applyRockPreset() {
         bpmEl.value = "110";
-        stepsPerBar = calcStepsPerBar();
-
-        ["hh", "sn", "k"].forEach((k) => {
-          pattern[k as "hh"].length = stepsPerBar;
-          pattern[k as "hh"].fill(false);
-        });
+        buildSequencer();
 
         const subdiv = +subdivEl.value;
         const beats = +tsNumEl.value;
@@ -193,26 +190,25 @@ export default function Page() {
           pattern.hh[i] = true;
         }
 
-        // Kick: beats 1 & 3
+        // Kick on 1 & 3
         pattern.k[0] = true;
         if (beats >= 3) pattern.k[2 * subdiv] = true;
 
-        // Snare: beats 2 & 4
+        // Snare on 2 & 4
         if (beats >= 2) pattern.sn[subdiv] = true;
         if (beats >= 4) pattern.sn[3 * subdiv] = true;
 
-        buildSequencer();
-
-        // Re-apply visual state
+        // Paint UI
         const rows = seqEl.querySelectorAll(".steps");
-        ["hh", "sn", "k"].forEach((inst, rowIdx) => {
-          const steps = rows[rowIdx].children;
+        ["hh", "sn", "k"].forEach((inst, r) => {
+          const cells = rows[r].children;
           for (let i = 0; i < stepsPerBar; i++) {
-            steps[i].classList.toggle("on", pattern[inst as "hh"][i]);
+            cells[i].classList.toggle("on", pattern[inst][i]);
           }
         });
       }
 
+      // ---------- Transport ----------
       function scheduler() {
         while (nextNoteTime < audioCtx!.currentTime + scheduleAheadSec) {
           if (pattern.hh[currentStep]) playHiHat(nextNoteTime);
