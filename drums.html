@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Drum Machine</title>
+  <style>
+    :root { color-scheme: dark; }
+    body{
+      margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background:#000; color:#fff;
+    }
+    .wrap{ max-width:1100px; margin:0 auto; padding:18px; }
+    h1{ margin:0 0 10px; font-size:20px; letter-spacing:0.5px; }
+    .panel{
+      border:1px solid #fff; border-radius:12px; padding:14px; margin-bottom:14px;
+    }
+    .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+    .col{ flex:1 1 160px; min-width:160px; }
+    label{ display:block; font-size:12px; opacity:.9; margin-bottom:6px; }
+    input[type="number"], select{
+      width:100%; padding:10px 10px; border:1px solid #fff; background:#000; color:#fff;
+      border-radius:10px; outline:none;
+    }
+    input[type="range"]{ width:100%; }
+    .btns{ display:flex; gap:10px; flex-wrap:wrap; }
+    button{
+      padding:10px 14px; border:1px solid #fff; background:#000; color:#fff;
+      border-radius:10px; cursor:pointer; font-weight:600;
+    }
+    button:disabled{ opacity:.45; cursor:not-allowed; }
+    .status{ font-size:12px; opacity:.85; margin-top:8px; }
+    .grid{
+      display:grid; gap:10px;
+      grid-template-columns: 110px 1fr;
+      align-items:center;
+    }
+    .inst{
+      font-weight:700; letter-spacing:0.4px;
+      display:flex; align-items:center; gap:8px;
+    }
+    .mute{
+      font-size:11px; padding:5px 8px; border-radius:999px; border:1px solid #fff;
+      background:#000; color:#fff; cursor:pointer;
+    }
+    .steps{
+      display:grid; gap:6px;
+      grid-auto-flow:column;
+      grid-auto-columns: minmax(28px, 1fr);
+      align-items:stretch;
+    }
+    .step{
+      height:34px; border:1px solid #fff; border-radius:8px;
+      display:flex; align-items:center; justify-content:center;
+      user-select:none; cursor:pointer; font-size:11px;
+      background:#000; color:#fff;
+    }
+    .step.on{ background:#fff; color:#000; }
+    .step.playing{ outline:2px solid #fff; outline-offset:2px; }
+    .legend{ display:flex; gap:10px; flex-wrap:wrap; font-size:12px; opacity:.9; margin-top:8px; }
+    .pill{ border:1px solid #fff; border-radius:999px; padding:6px 10px; }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .small{ font-size:12px; opacity:.85; }
+    .footer{ font-size:12px; opacity:.75; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Drum Machine</h1>
+
+    <div class="panel">
+      <div class="row">
+        <div class="col">
+          <label for="bpm">BPM (quarter-note)</label>
+          <input id="bpm" type="number" min="40" max="240" step="1" value="110" />
+        </div>
+
+        <div class="col">
+          <label for="tsNum">Time signature (numerator)</label>
+          <input id="tsNum" type="number" min="1" max="15" step="1" value="4" />
+        </div>
+
+        <div class="col">
+          <label for="tsDen">Time signature (denominator)</label>
+          <select id="tsDen">
+            <option value="4" selected>4</option>
+            <option value="8">8</option>
+            <option value="16">16</option>
+          </select>
+        </div>
+
+        <div class="col">
+          <label for="subdiv">Steps per beat</label>
+          <select id="subdiv">
+            <option value="2">2 (8ths)</option>
+            <option value="4" selected>4 (16ths)</option>
+            <option value="8">8 (32nds)</option>
+          </select>
+        </div>
+
+        <div class="col">
+          <label for="master">Master Volume</label>
+          <input id="master" type="range" min="0" max="1" step="0.001" value="0.9" />
+          <div class="small mono" id="masterVal"></div>
+        </div>
+
+        <div class="col">
+          <div class="btns">
+            <button id="startBtn">Start</button>
+            <button id="stopBtn" disabled>Stop</button>
+            <button id="clearBtn">Clear</button>
+            <button id="presetBtn">Basic Rock</button>
+          </div>
+          <div class="status mono" id="status">stopped</div>
+        </div>
+      </div>
+
+      <div class="legend">
+        <div class="pill">Click steps to toggle</div>
+        <div class="pill">Independent volumes: Hi-hat / Snare / Kick</div>
+        <div class="pill">Loop length follows time signature</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <div class="col">
+          <label for="hhVol">Hi-hat Volume</label>
+          <input id="hhVol" type="range" min="0" max="1" step="0.001" value="0.45" />
+          <div class="small mono" id="hhVal"></div>
+        </div>
+        <div class="col">
+          <label for="snVol">Snare Volume</label>
+          <input id="snVol" type="range" min="0" max="1" step="0.001" value="0.55" />
+          <div class="small mono" id="snVal"></div>
+        </div>
+        <div class="col">
+          <label for="kVol">Kick Volume</label>
+          <input id="kVol" type="range" min="0" max="1" step="0.001" value="0.8" />
+          <div class="small mono" id="kVal"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="grid" id="sequencer"></div>
+      <div class="footer mono" id="loopInfo"></div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ---------- Audio ----------
+  let audioCtx = null;
+  const lookaheadMs = 25;      // scheduler interval
+  const scheduleAheadSec = 0.12; // how far ahead to schedule
+  let timerId = null;
+
+  let nextNoteTime = 0;
+  let currentStep = 0;
+  let isPlaying = false;
+
+  // master + instrument gains
+  let masterGain, hhGain, snGain, kGain;
+
+  // mute states
+  const mute = { hh:false, sn:false, k:false };
+
+  // ---------- UI ----------
+  const bpmEl = document.getElementById('bpm');
+  const tsNumEl = document.getElementById('tsNum');
+  const tsDenEl = document.getElementById('tsDen');
+  const subdivEl = document.getElementById('subdiv');
+
+  const masterEl = document.getElementById('master');
+  const hhVolEl = document.getElementById('hhVol');
+  const snVolEl = document.getElementById('snVol');
+  const kVolEl  = document.getElementById('kVol');
+
+  const masterValEl = document.getElementById('masterVal');
+  const hhValEl = document.getElementById('hhVal');
+  const snValEl = document.getElementById('snVal');
+  const kValEl  = document.getElementById('kVal');
+
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn  = document.getElementById('stopBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const presetBtn= document.getElementById('presetBtn');
+  const statusEl = document.getElementById('status');
+  const seqEl = document.getElementById('sequencer');
+  const loopInfoEl = document.getElementById('loopInfo');
+
+  // patterns (arrays of booleans) keyed by instrument
+  let stepsPerBar = 16;
+  const pattern = { hh:[], sn:[], k:[] };
+
+  // ---------- Helpers ----------
+  function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+
+  function calcStepsPerBar(){
+    const num = clamp(parseInt(tsNumEl.value || "4", 10), 1, 15);
+    const den = parseInt(tsDenEl.value, 10);
+    const subdiv = parseInt(subdivEl.value, 10); // steps per beat
+
+    // Define "beat" by denominator: 4=quarter, 8=eighth, 16=sixteenth
+    // BPM is treated as quarter-note BPM, but beat-based step count should still reflect time signature.
+    // beatsPerBar = numerator (by definition)
+    // stepsPerBar = beatsPerBar * stepsPerBeat
+    // If denominator != 4, we adjust stepsPerBeat so the visual grid still lines up musically:
+    // quarter contains (den/4) beats when den>4? Actually: if den=8, one beat is an eighth (half a quarter),
+    // so there are 2 beats per quarter. We'll scale stepsPerBeat accordingly.
+    // baseline: stepsPerBeat is per "beat" unit (denominator note).
+    // timing uses quarter-note BPM, so we'll adjust seconds per step in the scheduler separately.
+    const spb = num * subdiv;
+    return { num, den, subdiv, spb };
+  }
+
+  function secondsPerStep(){
+    // BPM is quarter-note BPM.
+    // Step is (1/subdiv) of a beat (denominator note).
+    const bpm = clamp(parseFloat(bpmEl.value || "110"), 40, 240);
+    const den = parseInt(tsDenEl.value, 10);
+    const subdiv = parseInt(subdivEl.value, 10);
+
+    // quarter note duration:
+    const q = 60 / bpm;
+
+    // denominator note duration:
+    // if den=4 => beat=quarter => beatDur=q
+    // if den=8 => beat=eighth => beatDur=q/2
+    // if den=16 => beat=sixteenth => beatDur=q/4
+    const beatDur = q * (4 / den);
+
+    // step duration:
+    return beatDur / subdiv;
+  }
+
+  function setStatus(text){
+    statusEl.textContent = text;
+  }
+
+  function fmt01(x){ return (Math.round(x*1000)/1000).toFixed(3); }
+
+  function updateVolumeLabels(){
+    masterValEl.textContent = `master: ${fmt01(parseFloat(masterEl.value))}`;
+    hhValEl.textContent = `hh: ${fmt01(parseFloat(hhVolEl.value))}`;
+    snValEl.textContent = `sn: ${fmt01(parseFloat(snVolEl.value))}`;
+    kValEl.textContent  = `kick: ${fmt01(parseFloat(kVolEl.value))}`;
+  }
+
+  function ensureAudio(){
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    masterGain = audioCtx.createGain();
+    hhGain = audioCtx.createGain();
+    snGain = audioCtx.createGain();
+    kGain  = audioCtx.createGain();
+
+    masterGain.gain.value = parseFloat(masterEl.value);
+    hhGain.gain.value = parseFloat(hhVolEl.value);
+    snGain.gain.value = parseFloat(snVolEl.value);
+    kGain.gain.value  = parseFloat(kVolEl.value);
+
+    hhGain.connect(masterGain);
+    snGain.connect(masterGain);
+    kGain.connect(masterGain);
+    masterGain.connect(audioCtx.destination);
+  }
+
+  // ---------- Drum synths ----------
+  function playKick(time){
+    if (!audioCtx || mute.k) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(140, time);
+    osc.frequency.exponentialRampToValueAtTime(50, time + 0.08);
+
+    gain.gain.setValueAtTime(1.0, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
+
+    osc.connect(gain);
+    gain.connect(kGain);
+
+    osc.start(time);
+    osc.stop(time + 0.14);
+  }
+
+  function noiseBuffer(){
+    const length = audioCtx.sampleRate * 0.25;
+    const buffer = audioCtx.createBuffer(1, length, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i=0;i<length;i++) data[i] = (Math.random()*2-1);
+    return buffer;
+  }
+
+  function playSnare(time){
+    if (!audioCtx || mute.sn) return;
+
+    // noise
+    const src = audioCtx.createBufferSource();
+    src.buffer = noiseBuffer();
+
+    const hp = audioCtx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.setValueAtTime(900, time);
+
+    const ng = audioCtx.createGain();
+    ng.gain.setValueAtTime(0.9, time);
+    ng.gain.exponentialRampToValueAtTime(0.001, time + 0.14);
+
+    // tone
+    const osc = audioCtx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(180, time);
+
+    const tg = audioCtx.createGain();
+    tg.gain.setValueAtTime(0.25, time);
+    tg.gain.exponentialRampToValueAtTime(0.001, time + 0.09);
+
+    src.connect(hp);
+    hp.connect(ng);
+    ng.connect(snGain);
+
+    osc.connect(tg);
+    tg.connect(snGain);
+
+    src.start(time);
+    src.stop(time + 0.16);
+    osc.start(time);
+    osc.stop(time + 0.12);
+  }
+
+  function playHiHat(time){
+    if (!audioCtx || mute.hh) return;
+
+    const src = audioCtx.createBufferSource();
+    src.buffer = noiseBuffer();
+
+    const bp = audioCtx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.setValueAtTime(9000, time);
+    bp.Q.setValueAtTime(0.8, time);
+
+    const hp = audioCtx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.setValueAtTime(7000, time);
+
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.35, time);
+    g.gain.exponentialRampToValueAtTime(0.001, time + 0.06);
+
+    src.connect(bp);
+    bp.connect(hp);
+    hp.connect(g);
+    g.connect(hhGain);
+
+    src.start(time);
+    src.stop(time + 0.08);
+  }
+
+  // ---------- Sequencer UI ----------
+  function makeStep(labelText){
+    const d = document.createElement('div');
+    d.className = 'step';
+    d.textContent = labelText;
+    return d;
+  }
+
+  function buildSequencer(){
+    const { num, den, subdiv, spb } = calcStepsPerBar();
+    stepsPerBar = spb;
+
+    // resize patterns preserving existing on/off where possible
+    for (const key of ["hh","sn","k"]){
+      const old = pattern[key].slice();
+      pattern[key] = new Array(stepsPerBar).fill(false);
+      for (let i=0;i<Math.min(old.length, stepsPerBar);i++) pattern[key][i] = old[i];
+    }
+
+    // render
+    seqEl.innerHTML = "";
+
+    const insts = [
+      { key:"hh", name:"HI-HAT" },
+      { key:"sn", name:"SNARE" },
+      { key:"k",  name:"KICK"  }
+    ];
+
+    insts.forEach(inst => {
+      const left = document.createElement('div');
+      left.className = 'inst';
+      left.innerHTML = `<span>${inst.name}</span>`;
+
+      const muteBtn = document.createElement('button');
+      muteBtn.className = 'mute mono';
+      muteBtn.textContent = mute[inst.key] ? "MUTED" : "MUTE";
+      muteBtn.onclick = () => {
+        mute[inst.key] = !mute[inst.key];
+        muteBtn.textContent = mute[inst.key] ? "MUTED" : "MUTE";
+      };
+      left.appendChild(muteBtn);
+
+      const steps = document.createElement('div');
+      steps.className = 'steps';
+
+      for (let i=0;i<stepsPerBar;i++){
+        const s = makeStep("");
+        s.dataset.inst = inst.key;
+        s.dataset.step = String(i);
+        if (pattern[inst.key][i]) s.classList.add('on');
+
+        s.onclick = () => {
+          const k = s.dataset.inst;
+          const idx = parseInt(s.dataset.step, 10);
+          pattern[k][idx] = !pattern[k][idx];
+          s.classList.toggle('on', pattern[k][idx]);
+        };
+
+        steps.appendChild(s);
+      }
+
+      seqEl.appendChild(left);
+      seqEl.appendChild(steps);
+    });
+
+    loopInfoEl.textContent =
+      `loop: ${num}/${den}, ${subdiv} steps/beat → ${stepsPerBar} steps/bar`;
+  }
+
+  function clearPattern(){
+    for (const k of ["hh","sn","k"]) pattern[k].fill(false);
+    buildSequencer();
+  }
+
+  function basicRockPreset(){
+    // A simple pattern that adapts to the current step count:
+    // Kick on 1 and 3, snare on 2 and 4, hats on every step.
+    const { num, subdiv, spb } = calcStepsPerBar();
+    const steps = spb;
+
+    for (const k of ["hh","sn","k"]) pattern[k] = new Array(steps).fill(false);
+
+    // hats every step
+    for (let i=0;i<steps;i++) pattern.hh[i] = true;
+
+    // map beats to step indices
+    // beatStart = beatIndex * subdiv
+    for (let beat=0; beat<num; beat++){
+      const idx = beat * subdiv;
+      // kick on beat 1 and 3 (0 and 2) if available
+      if (beat === 0 || beat === 2) pattern.k[idx] = true;
+      // snare on beat 2 and 4 (1 and 3) if available
+      if (beat === 1 || beat === 3) pattern.sn[idx] = true;
+    }
+
+    // a little extra kick syncopation if 16ths (subdiv=4) and 4/4-ish
+    if (subdiv >= 4 && num >= 4){
+      pattern.k[0] = true;
+      pattern.k[6] = true;   // "and" of 2
+      pattern.k[8] = true;
+      pattern.k[14] = true;  // "and" of 4
+    }
+
+    buildSequencer();
+  }
+
+  // ---------- Scheduling ----------
+  function highlightStep(stepIndex){
+    // find each row's steps container and apply playing class
+    const stepEls = seqEl.querySelectorAll('.step');
+    stepEls.forEach(el => el.classList.remove('playing'));
+
+    // for each instrument row, mark the corresponding step
+    const targets = seqEl.querySelectorAll(`.step[data-step="${stepIndex}"]`);
+    targets.forEach(el => el.classList.add('playing'));
+  }
+
+  function scheduleStep(stepIndex, time){
+    // Trigger audio based on pattern
+    if (pattern.hh[stepIndex]) playHiHat(time);
+    if (pattern.sn[stepIndex]) playSnare(time);
+    if (pattern.k[stepIndex])  playKick(time);
+  }
+
+  function scheduler(){
+    while (nextNoteTime < audioCtx.currentTime + scheduleAheadSec){
+      scheduleStep(currentStep, nextNoteTime);
+
+      // UI highlight close to "now"
+      const stepToHighlight = currentStep;
+      const delayMs = Math.max(0, (nextNoteTime - audioCtx.currentTime) * 1000);
+      setTimeout(() => { if (isPlaying) highlightStep(stepToHighlight); }, delayMs);
+
+      nextNoteTime += secondsPerStep();
+      currentStep = (currentStep + 1) % stepsPerBar;
+    }
+  }
+
+  async function start(){
+    ensureAudio();
+    if (audioCtx.state === "suspended") await audioCtx.resume();
+
+    isPlaying = true;
+    currentStep = currentStep % stepsPerBar;
+    nextNoteTime = audioCtx.currentTime + 0.05;
+
+    timerId = setInterval(scheduler, lookaheadMs);
+
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    setStatus("playing");
+  }
+
+  function stop(){
+    isPlaying = false;
+    if (timerId) clearInterval(timerId);
+    timerId = null;
+
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    setStatus("stopped");
+
+    // clear highlight
+    const stepEls = seqEl.querySelectorAll('.step');
+    stepEls.forEach(el => el.classList.remove('playing'));
+  }
+
+  // ---------- Wiring ----------
+  function wireVolumes(){
+    const apply = () => {
+      updateVolumeLabels();
+      if (!audioCtx) return;
+      masterGain.gain.value = parseFloat(masterEl.value);
+      hhGain.gain.value = parseFloat(hhVolEl.value);
+      snGain.gain.value = parseFloat(snVolEl.value);
+      kGain.gain.value  = parseFloat(kVolEl.value);
+    };
+    [masterEl, hhVolEl, snVolEl, kVolEl].forEach(el => el.addEventListener('input', apply));
+    apply();
+  }
+
+  function rebuildAndKeepPlayingIfNeeded(){
+    const was = isPlaying;
+    if (was) stop();
+    buildSequencer();
+    if (was) start();
+  }
+
+  bpmEl.addEventListener('change', () => {
+    // tempo changes take effect immediately via secondsPerStep() used in scheduler
+    bpmEl.value = String(clamp(parseInt(bpmEl.value||"110",10),40,240));
+  });
+
+  tsNumEl.addEventListener('change', () => {
+    tsNumEl.value = String(clamp(parseInt(tsNumEl.value||"4",10),1,15));
+    rebuildAndKeepPlayingIfNeeded();
+  });
+  tsDenEl.addEventListener('change', rebuildAndKeepPlayingIfNeeded);
+  subdivEl.addEventListener('change', rebuildAndKeepPlayingIfNeeded);
+
+  startBtn.addEventListener('click', start);
+  stopBtn.addEventListener('click', stop);
+  clearBtn.addEventListener('click', () => { clearPattern(); });
+  presetBtn.addEventListener('click', () => { basicRockPreset(); });
+
+  // init
+  buildSequencer();
+  wireVolumes();
+})();
+</script>
+</body>
+</html>
