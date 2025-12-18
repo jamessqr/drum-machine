@@ -201,13 +201,13 @@ export default function Page() {
 
         // Paint UI
         const rows = seqEl.querySelectorAll(".steps");
-        ["hh", "sn", "k"].forEach((inst, r) => {
+        INSTRUMENTS.forEach((inst, r) => {
           const cells = rows[r].children;
           for (let i = 0; i < stepsPerBar; i++) {
             cells[i].classList.toggle("on", pattern[inst][i]);
           }
         });
-      }
+
 
       // ---------- Transport ----------
       function scheduler() {
