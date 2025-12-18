@@ -17,6 +17,7 @@ export default function Page() {
     let currentStep = 0;
     let isPlaying = false;
 
+    // Keep nullable for TS safety; use non-null assertion ONLY after ensureAudio()
     let masterGain: GainNode | null = null;
     let hhGain: GainNode | null = null;
     let snGain: GainNode | null = null;
@@ -69,30 +70,49 @@ export default function Page() {
       return beat / subdiv;
     }
 
-   function ensureAudio() {
+    // Dramatic + musical response curve:
+    // - Exponential feel (v^2.2)
+    // - Allows gain > 1.0 (very audible)
+    function applyVolume(
+      el: HTMLInputElement,
+      gain: GainNode | null,
+      max: number
+    ) {
+      if (!audioCtx || !gain) return;
+
+      const v = Math.max(0, Math.min(1, parseFloat(el.value))); // 0..1
+      const scaled = Math.pow(v, 2.2) * max; // dramatic
+      gain.gain.setTargetAtTime(scaled, audioCtx.currentTime, 0.01);
+    }
+
+    function applyAllVolumes() {
+      // These max values are intentionally punchy
+      applyVolume(masterEl, masterGain, 1.6);
+      applyVolume(hhVolEl, hhGain, 2.2);
+      applyVolume(snVolEl, snGain, 3.0);
+      applyVolume(kVolEl, kGain, 3.6);
+    }
+
+    function ensureAudio() {
       if (audioCtx) return;
 
       audioCtx = new AudioContext();
 
-      // Create gain nodes FIRST
+      // Create gain nodes
       masterGain = audioCtx.createGain();
       hhGain = audioCtx.createGain();
       snGain = audioCtx.createGain();
       kGain = audioCtx.createGain();
 
-      // Wire signal chain
-      hhGain.connect(masterGain);
-      snGain.connect(masterGain);
-      kGain.connect(masterGain);
-      masterGain.connect(audioCtx.destination);
+      // Wire signal chain (non-null assertions are safe after creation)
+      hhGain!.connect(masterGain!);
+      snGain!.connect(masterGain!);
+      kGain!.connect(masterGain!);
+      masterGain!.connect(audioCtx.destination);
 
-      // Apply initial volumes (exponential + dramatic)
-      applyVolume(masterEl, masterGain, 1.5);
-      applyVolume(hhVolEl, hhGain, 2.0);
-      applyVolume(snVolEl, snGain, 2.5);
-      applyVolume(kVolEl, kGain, 3.0);
+      // Apply initial volumes
+      applyAllVolumes();
     }
-
 
     function noiseBuffer() {
       const length = audioCtx!.sampleRate * 0.25;
@@ -110,7 +130,7 @@ export default function Page() {
       o.frequency.exponentialRampToValueAtTime(50, t + 0.08);
       g.gain.setValueAtTime(1, t);
       g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-      o.connect(g).connect(kGain);
+      o.connect(g).connect(kGain!); // FIX: kGain is non-null after ensureAudio()
       o.start(t);
       o.stop(t + 0.14);
     }
@@ -124,7 +144,7 @@ export default function Page() {
       const g = audioCtx!.createGain();
       g.gain.setValueAtTime(0.9, t);
       g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
-      src.connect(hp).connect(g).connect(snGain);
+      src.connect(hp).connect(g).connect(snGain!); // FIX
       src.start(t);
       src.stop(t + 0.16);
     }
@@ -138,24 +158,10 @@ export default function Page() {
       const g = audioCtx!.createGain();
       g.gain.setValueAtTime(0.35, t);
       g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
-      src.connect(hp).connect(g).connect(hhGain);
+      src.connect(hp).connect(g).connect(hhGain!); // FIX
       src.start(t);
       src.stop(t + 0.08);
     }
-
-    function applyVolume(
-      el: HTMLInputElement,
-      gain: GainNode | null,
-      max = 2.5
-    ) {
-      if (!audioCtx || !gain) return;
-
-      const v = parseFloat(el.value); // 0–1
-      const scaled = Math.pow(v, 2) * max;
-
-      gain.gain.setTargetAtTime(scaled, audioCtx.currentTime, 0.01);
-    }
-
 
     // ---------- Sequencer ----------
     function buildSequencer() {
@@ -197,16 +203,13 @@ export default function Page() {
       loopInfoEl.textContent = `${tsNumEl.value}/${tsDenEl.value} • ${stepsPerBar} steps`;
     }
 
+    // Live volume updates (works during playback; dramatic curve)
     [masterEl, hhVolEl, snVolEl, kVolEl].forEach((el) => {
       el.addEventListener("input", () => {
         if (!audioCtx) return;
-        applyVolume(masterEl, masterGain, 1.5);
-        applyVolume(hhVolEl, hhGain, 2.0);
-        applyVolume(snVolEl, snGain, 2.5);
-        applyVolume(kVolEl, kGain, 3.0);
+        applyAllVolumes();
       });
     });
-
 
     // ---------- ROCK PRESET ----------
     function applyRockPreset() {
@@ -216,17 +219,19 @@ export default function Page() {
       const subdiv = +subdivEl.value;
       const beats = +tsNumEl.value;
 
+      // Hi-hat on 8ths
       const hatInterval = subdiv >= 4 ? subdiv / 2 : 1;
-      for (let i = 0; i < stepsPerBar; i += hatInterval) {
-        pattern.hh[i] = true;
-      }
+      for (let i = 0; i < stepsPerBar; i += hatInterval) pattern.hh[i] = true;
 
+      // Kick on 1 & 3
       pattern.k[0] = true;
       if (beats >= 3) pattern.k[2 * subdiv] = true;
 
+      // Snare on 2 & 4
       if (beats >= 2) pattern.sn[subdiv] = true;
       if (beats >= 4) pattern.sn[3 * subdiv] = true;
 
+      // Paint UI
       const rows = seqEl.querySelectorAll(".steps");
       INSTRUMENTS.forEach((inst, r) => {
         const cells = rows[r].children;
@@ -242,6 +247,7 @@ export default function Page() {
         if (pattern.hh[currentStep]) playHiHat(nextNoteTime);
         if (pattern.sn[currentStep]) playSnare(nextNoteTime);
         if (pattern.k[currentStep]) playKick(nextNoteTime);
+
         currentStep = (currentStep + 1) % stepsPerBar;
         nextNoteTime += secondsPerStep();
       }
@@ -250,6 +256,10 @@ export default function Page() {
     async function start() {
       ensureAudio();
       await audioCtx!.resume();
+
+      // Ensure current slider positions are applied at start time too
+      applyAllVolumes();
+
       isPlaying = true;
       nextNoteTime = audioCtx!.currentTime + 0.05;
       timerId = setInterval(scheduler, lookaheadMs);
@@ -272,6 +282,11 @@ export default function Page() {
     presetBtn.onclick = applyRockPreset;
 
     applyRockPreset();
+
+    // Cleanup for hot reloads/dev
+    return () => {
+      clearInterval(timerId);
+    };
   }, []);
 
   return (
@@ -300,7 +315,9 @@ export default function Page() {
         <h1>Drum Machine</h1>
 
         <div className="panel row">
-          <label>BPM <input id="bpm" type="number" defaultValue={110} /></label>
+          <label>
+            BPM <input id="bpm" type="number" defaultValue={110} />
+          </label>
           <label>
             Time Sig <input id="tsNum" type="number" defaultValue={4} />
             <select id="tsDen">
@@ -316,17 +333,61 @@ export default function Page() {
             </select>
           </label>
           <button id="startBtn">Start</button>
-          <button id="stopBtn" disabled>Stop</button>
+          <button id="stopBtn" disabled>
+            Stop
+          </button>
           <button id="clearBtn">Clear</button>
           <button id="presetBtn">Rock</button>
-          <div id="status" className="status">stopped</div>
+          <div id="status" className="status">
+            stopped
+          </div>
         </div>
 
         <div className="panel row">
-          <label>Hi-hat <input id="hhVol" type="range" min="0" max="1" step="0.01" defaultValue="0.5" /></label>
-          <label>Snare <input id="snVol" type="range" min="0" max="1" step="0.01" defaultValue="0.6" /></label>
-          <label>Kick <input id="kVol" type="range" min="0" max="1" step="0.01" defaultValue="0.8" /></label>
-          <label>Master <input id="master" type="range" min="0" max="1" step="0.01" defaultValue="0.9" /></label>
+          <label>
+            Hi-hat{" "}
+            <input
+              id="hhVol"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              defaultValue="0.5"
+            />
+          </label>
+          <label>
+            Snare{" "}
+            <input
+              id="snVol"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              defaultValue="0.6"
+            />
+          </label>
+          <label>
+            Kick{" "}
+            <input
+              id="kVol"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              defaultValue="0.8"
+            />
+          </label>
+          <label>
+            Master{" "}
+            <input
+              id="master"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              defaultValue="0.9"
+            />
+          </label>
         </div>
 
         <div className="panel">
