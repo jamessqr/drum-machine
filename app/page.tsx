@@ -73,10 +73,10 @@ export default function Page() {
       if (audioCtx) return;
       audioCtx = new AudioContext();
 
-      masterGain = audioCtx.createGain();
-      hhGain = audioCtx.createGain();
-      snGain = audioCtx.createGain();
-      kGain = audioCtx.createGain();
+      applyVolume(masterEl, masterGain, 1.5);
+      applyVolume(hhVolEl, hhGain, 2.0);
+      applyVolume(snVolEl, snGain, 2.5);
+      applyVolume(kVolEl, kGain, 3.0);
 
       masterGain.gain.value = +masterEl.value;
       hhGain.gain.value = +hhVolEl.value;
@@ -138,6 +138,14 @@ export default function Page() {
       src.stop(t + 0.08);
     }
 
+    function applyVolume(el: HTMLInputElement, gain: GainNode, max = 2.5) {
+      // exponential curve for musical feel
+      const v = parseFloat(el.value); // 0–1
+      const scaled = Math.pow(v, 2) * max;
+      gain.gain.setTargetAtTime(scaled, audioCtx!.currentTime, 0.01);
+    }
+
+
     // ---------- Sequencer ----------
     function buildSequencer() {
       stepsPerBar = calcStepsPerBar();
@@ -177,6 +185,16 @@ export default function Page() {
 
       loopInfoEl.textContent = `${tsNumEl.value}/${tsDenEl.value} • ${stepsPerBar} steps`;
     }
+
+    [masterEl, hhVolEl, snVolEl, kVolEl].forEach((el) => {
+      el.addEventListener("input", () => {
+        if (!audioCtx) return;
+        applyVolume(masterEl, masterGain, 1.5);
+        applyVolume(hhVolEl, hhGain, 2.0);
+        applyVolume(snVolEl, snGain, 2.5);
+        applyVolume(kVolEl, kGain, 3.0);
+      });
+    });
 
     // ---------- ROCK PRESET ----------
     function applyRockPreset() {
